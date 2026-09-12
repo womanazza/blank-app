@@ -5,6 +5,7 @@ import pandas as pd
 import re
 import os
 import subprocess
+from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide", page_title="Quiniela San Juan")
 
@@ -14,7 +15,6 @@ st.markdown(
         .stApp { background-color: #000000; }
         h1, h2, h3, h4, h5, p, span, div, label { color: white; }
 
-        /* Estilo de botones con relieve */
         .stButton > button {
             background: linear-gradient(145deg, #3a3a3a, #2a2a2a);
             color: white;
@@ -37,148 +37,232 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("Quiniela San Juan - Datos del día")
+st.title("Quiniela San Juan")
 
-url = "https://www.loteriasmundiales.com.ar/Quinielas/san-juan"
+# ---------------- Pestañas ----------------
+tab_hoy, tab_historial, tab_datos = st.tabs(["📅 Hoy", "🔄 Actualizar historial", "📊 Datos guardados"])
 
-try:
-    r = requests.get(url, timeout=15)
-    sopa = BeautifulSoup(r.text, "html.parser")
+# ============ TAB 1: Datos del día (CAS) ============
+with tab_hoy:
+    st.markdown("### Resultados del día (fuente oficial CAS)")
 
-    texto_pagina = sopa.get_text(" ", strip=True)
-    fecha_match = re.search(
-        r"Resultados del d[ií]a\s+\w+\s+(\d{1,2}\s+de\s+\w+\s+de\s+\d{4})",
-        texto_pagina, re.IGNORECASE
-    )
-    fecha_str = fecha_match.group(1) if fecha_match else "Fecha desconocida"
-    st.markdown(f"### 📅 {fecha_str}")
+    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+    url_cas = f"https://cas.gob.ar/juegos/sorteos/resultados?juego=quiniela&fecha={fecha_hoy}"
 
-    tarjetas = sopa.find_all("div", class_=lambda c: c and "w3-card" in c)
+    try:
+        r = requests.get(url_cas, timeout=15)
+        sopa = BeautifulSoup(r.text, "html.parser")
 
-    resultados = []
-    for tarjeta in tarjetas:
-        texto_tarjeta = tarjeta.get_text(" ", strip=True)
-        if "San Juan" not in texto_tarjeta:
-            continue
+        tarjetas = sopa.find_all("div", class_="quiniela-card")
 
-        upper = texto_tarjeta.upper()
-        if "VESPERTINA" in upper:
-            turno = "Vespertina"
-            hora = "14:00 hs"
-        elif "NOCTURNA" in upper:
-            turno = "Nocturna"
-            hora = "21:00 hs"
-        elif "TARDE" in upper:
-            turno = "Tarde"
-            hora = "17:30 hs"
+        orden = {"Vespertino": 0, "Vespertina": 0, "Tarde": 1, "Nocturno": 2, "Nocturna": 2}
+        datos_dia = []
+
+        for tarjeta in tarjetas:
+            h4 = tarjeta.find("h4")
+            if not h4:
+                continue
+            turno_txt = h4.get_text(strip=True)
+
+            if "Vespertin" in turno_txt:
+                turno = "Vespertina"
+            elif "Tarde" in turno_txt:
+                turno = "Tarde"
+            elif "Nocturn" in turno_txt:
+                turno = "Nocturna"
+            else:
+                continue
+
+            # Extraer fecha del sorteo
+            info = tarjeta.find("div", class_="quiniela-sorteo-info")
+            fecha_sorteo = fecha_hoy
+            if info:
+                spans = info.find_all("span")
+                for s in spans:
+                    txt = s.get_text(strip=True)
+                    if re.match(r"\d{2}/\d{2}/\d{4}", txt):
+                        fecha_sorteo = txt
+                        break
+
+            # Extraer números
+            tabla = tarjeta.find("table")
+            if not tabla:
+                continue
+            numeros = [td.get_text(strip=True) for td in tabla.find_all("td", class_="num")]
+            if len(numeros) < 20:
+                continue
+
+            datos_dia.append({
+                "turno": turno,
+                "fecha": fecha_sorteo,
+                "numeros": numeros[:20],
+                "orden": orden.get(turno, 99)
+            })
+
+        datos_dia.sort(key=lambda x: x["orden"])
+
+        if datos_dia:
+            columnas = st.columns(3)
+            for i, d in enumerate(datos_dia):
+                with columnas[i]:
+                    filas_html = ""
+                    for j in range(10):
+                        n_izq = d["numeros"][j]
+                        n_der = d["numeros"][j + 10]
+                        estilo = "font-weight:bold; color:#ff3333;" if j == 0 else "color:white;"
+                        filas_html += f"""
+                        <tr>
+                            <td style="text-align:center; padding:6px; color:#aaaaaa;
+                                       border-bottom:1px solid #333;">{j+1}</td>
+                            <td style="text-align:center; padding:6px; {estilo}
+                                       border-bottom:1px solid #333;">{n_izq}</td>
+                            <td style="text-align:center; padding:6px; color:#aaaaaa;
+                                       border-bottom:1px solid #333;">{j+11}</td>
+                            <td style="text-align:center; padding:6px; color:white;
+                                       border-bottom:1px solid #333;">{n_der}</td>
+                        </tr>
+                        """
+
+                    st.html(f"""
+                        <div style="
+                            border: 2px solid #ffffff;
+                            border-radius: 15px;
+                            padding: 15px;
+                            background-color: #000000;
+                        ">
+                            <h3 style="text-align:center; margin:0 0 5px 0;
+                                       color:white; font-weight:bold;">
+                                {d['turno'].upper()}
+                            </h3>
+                            <p style="text-align:center; margin:0 0 10px 0;
+                                      color:#cccccc; font-size:13px;">
+                                San Juan ({d['fecha']})
+                            </p>
+                            <table style="width:100%; border-collapse:collapse;
+                                          color:white; font-size:15px;">
+                                {filas_html}
+                            </table>
+                        </div>
+                    """)
         else:
-            continue
+            st.warning("No se encontraron datos para hoy en la CAS.")
 
-        tabla = tarjeta.find("table")
-        if not tabla:
-            continue
+    except Exception as e:
+        st.error(f"Error al leer la CAS: {e}")
 
-        numeros = []
-        for celda in tabla.find_all("td"):
-            txt = celda.get_text(strip=True)
-            if re.fullmatch(r"\d{4}", txt):
-                numeros.append(txt)
+# ============ TAB 2: Actualizar historial ============
+with tab_historial:
+    st.markdown("### Traer historial desde la CAS (web oficial)")
 
-        if len(numeros) < 20:
-            continue
+    st.markdown("""
+    Esta opción recorre **día por día** la web oficial de la Caja de Acción Social 
+    y guarda los 3 sorteos (Vespertina, Tarde, Nocturna) en `historial_quiniela.csv`.
+    
+    - 📅 **Desde**: hace 6 meses
+    - 📅 **Hasta**: hoy
+    - ⏱️ **Tiempo estimado**: 2-3 minutos
+    """)
 
-        numeros = numeros[:20]
-        resultados.append({
-            "fecha": fecha_str,
-            "turno": turno,
-            "hora": hora,
-            "cabeza": numeros[0][-2:],
-            "numeros": numeros,
-        })
+    dias_atras = st.slider("Días hacia atrás", 7, 200, 180, step=1)
 
-    orden = {"Vespertina": 0, "Tarde": 1, "Nocturna": 2}
-    resultados.sort(key=lambda x: orden.get(x["turno"], 99))
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Traer historial completo", use_container_width=True):
+            ARCHIVO = "historial_quiniela.csv"
+            if os.path.exists(ARCHIVO):
+                df_previo = pd.read_csv(ARCHIVO)
+                fechas_hechas = set(df_previo["fecha"].unique())
+                st.info(f"📂 Ya hay {len(fechas_hechas)} días guardados. Se van a saltear.")
+            else:
+                df_previo = pd.DataFrame()
+                fechas_hechas = set()
 
-    if resultados:
-        columnas = st.columns(3)
+            hoy = datetime.now()
+            resultados = []
+            progress = st.progress(0)
+            status = st.empty()
+            errores = 0
 
-        for i, resultado in enumerate(resultados):
-            with columnas[i]:
-                filas_html = ""
-                for j in range(10):
-                    n_izq = resultado["numeros"][j]
-                    n_der = resultado["numeros"][j + 10]
-                    estilo_izq = "font-weight:bold; color:#ff3333;" if j == 0 else "color:white;"
+            for i in range(dias_atras):
+                fecha = hoy - timedelta(days=i)
+                fecha_str = fecha.strftime("%d/%m/%Y")
+                fecha_url = fecha.strftime("%Y-%m-%d")
 
-                    filas_html += f"""
-                    <tr>
-                        <td style="text-align:center; padding:6px; color:#aaaaaa;
-                                   border-bottom:1px solid #333;">{j+1}</td>
-                        <td style="text-align:center; padding:6px; {estilo_izq}
-                                   border-bottom:1px solid #333;">{n_izq}</td>
-                        <td style="text-align:center; padding:6px; color:#aaaaaa;
-                                   border-bottom:1px solid #333;">{j+11}</td>
-                        <td style="text-align:center; padding:6px; color:white;
-                                   border-bottom:1px solid #333;">{n_der}</td>
-                    </tr>
-                    """
+                if fecha_str in fechas_hechas:
+                    progress.progress((i + 1) / dias_atras)
+                    continue
 
-                st.html(
-                    f"""
-                    <div style="
-                        border: 2px solid #ffffff;
-                        border-radius: 15px;
-                        padding: 15px;
-                        background-color: #000000;
-                    ">
-                        <h3 style="text-align:center; margin:0 0 5px 0;
-                                   color:white; font-weight:bold;">
-                            {resultado['turno'].upper()}
-                        </h3>
-                        <p style="text-align:center; margin:0 0 10px 0;
-                                  color:#cccccc; font-size:13px;">
-                            San Juan ({resultado['hora']})
-                        </p>
-                        <table style="width:100%; border-collapse:collapse;
-                                      color:white; font-size:15px;">
-                            {filas_html}
-                        </table>
-                    </div>
-                    """
-                )
+                status.text(f"📅 {fecha_str}... ({i+1}/{dias_atras})")
 
-        # Guardar CSV
-        df = pd.DataFrame([{
-            "fecha": r["fecha"], "turno": r["turno"], "cabeza": r["cabeza"],
-            **{f"n{i+1}": r["numeros"][i] for i in range(20)}
-        } for r in resultados])
-
-        archivo = "datos_quiniela.csv"
-        if os.path.exists(archivo):
-            df_previo = pd.read_csv(archivo)
-            df = pd.concat([df_previo, df], ignore_index=True)
-            df = df.drop_duplicates(subset=["fecha", "turno"], keep="last")
-        df.to_csv(archivo, index=False)
-
-        # Botón para subir a GitHub
-        st.markdown("---")
-        col_a, col_b, col_c = st.columns([1, 2, 1])
-        with col_b:
-            if st.button("💾 Guardar en GitHub", use_container_width=True):
                 try:
-                    subprocess.run(["git", "add", "datos_quiniela.csv"],
-                                   check=True, capture_output=True)
-                    subprocess.run(["git", "commit", "-m",
-                                    f"Actualizar datos {fecha_str}"],
-                                   check=True, capture_output=True)
-                    subprocess.run(["git", "push"],
-                                   check=True, capture_output=True)
-                    st.success("✅ Datos guardados en GitHub")
-                except subprocess.CalledProcessError as e:
-                    st.error(f"Error al guardar: {e.stderr.decode() if e.stderr else e}")
+                    url = f"https://cas.gob.ar/juegos/sorteos/resultados?juego=quiniela&fecha={fecha_url}"
+                    r = requests.get(url, timeout=10)
+                    sopa = BeautifulSoup(r.text, "html.parser")
+                    tarjetas = sopa.find_all("div", class_="quiniela-card")
 
-    else:
-        st.warning("No se encontraron resultados de San Juan.")
+                    for tarjeta in tarjetas:
+                        h4 = tarjeta.find("h4")
+                        if not h4:
+                            continue
+                        turno_txt = h4.get_text(strip=True)
+                        if "Vespertin" in turno_txt:
+                            turno = "Vespertina"
+                        elif "Tarde" in turno_txt:
+                            turno = "Tarde"
+                        elif "Nocturn" in turno_txt:
+                            turno = "Nocturna"
+                        else:
+                            continue
 
-except Exception as e:
-    st.error(f"Error: {e}")
+                        tabla = tarjeta.find("table")
+                        if not tabla:
+                            continue
+                        numeros = [td.get_text(strip=True) for td in tabla.find_all("td", class_="num")]
+                        if len(numeros) < 20:
+                            continue
+
+                        resultados.append({
+                            "fecha": fecha_str,
+                            "turno": turno,
+                            "cabeza": numeros[0][-2:],
+                            **{f"n{j+1}": numeros[j] for j in range(20)}
+                        })
+
+                except Exception:
+                    errores += 1
+
+                progress.progress((i + 1) / dias_atras)
+
+            # Guardar
+            if resultados:
+                df_nuevo = pd.DataFrame(resultados)
+                df_final = pd.concat([df_previo, df_nuevo], ignore_index=True)
+                df_final = df_final.drop_duplicates(subset=["fecha", "turno"], keep="last")
+                df_final.to_csv("historial_quiniela.csv", index=False)
+                status.success(f"🎉 Listo: {len(df_nuevo)} sorteos nuevos, {len(df_final)} filas totales")
+                if errores:
+                    st.warning(f"⚠️ {errores} días no se pudieron leer (probablemente no hay datos)")
+            else:
+                status.warning("No se encontraron datos nuevos")
+
+    with col2:
+        if st.button("💾 Guardar historial en GitHub", use_container_width=True):
+            try:
+                subprocess.run(["git", "add", "historial_quiniela.csv"], check=True, capture_output=True)
+                subprocess.run(["git", "commit", "-m", "Actualizar historial CAS"], check=True, capture_output=True)
+                subprocess.run(["git", "push"], check=True, capture_output=True)
+                st.success("✅ Historial guardado en GitHub")
+            except subprocess.CalledProcessError as e:
+                st.error(f"Error: {e.stderr.decode() if e.stderr else e}")
+
+# ============ TAB 3: Datos guardados ============
+with tab_datos:
+    st.markdown("### Datos guardados")
+
+    for archivo in ["datos_quiniela.csv", "historial_quiniela.csv"]:
+        if os.path.exists(archivo):
+            df = pd.read_csv(archivo)
+            st.subheader(f"📄 {archivo} ({len(df)} filas)")
+            st.dataframe(df.tail(20), use_container_width=True)
+        else:
+            st.info(f"📄 {archivo} todavía no existe")
