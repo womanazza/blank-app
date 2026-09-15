@@ -1,10 +1,26 @@
 import streamlit as st
+
+# ============ FIX: forzar instalación de librerías si faltan ============
+import subprocess
+import sys
+
+def _asegurar_libreria(modulo, paquete):
+    try:
+        __import__(modulo)
+    except ImportError:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", paquete])
+
+_asegurar_libreria("bs4", "beautifulsoup4")
+_asegurar_libreria("requests", "requests")
+_asegurar_libreria("pandas", "pandas")
+_asegurar_libreria("lxml", "lxml")
+
+# ============ IMPORTS NORMALES ============
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import re
 import os
-import subprocess
 from datetime import datetime, timedelta
 
 st.set_page_config(layout="wide", page_title="Quiniela San Juan")
@@ -143,7 +159,6 @@ def obtener_sorteos(fecha):
 
 
 def mostrar_cuadros_verdes(aciertos, max_mostrar=50):
-    """Muestra cuadros verdes con los números acertados"""
     if not aciertos:
         st.info("Sin aciertos.")
         return
@@ -266,14 +281,7 @@ with tab_historial:
                 status.warning("No se encontraron datos nuevos")
 
     with col2:
-        if st.button("💾 Guardar historial en GitHub", width='stretch'):
-            try:
-                subprocess.run(["git", "add", "historial_quiniela.csv"], check=True, capture_output=True)
-                subprocess.run(["git", "commit", "-m", "Actualizar historial CAS"], check=True, capture_output=True)
-                subprocess.run(["git", "push"], check=True, capture_output=True)
-                st.success("✅ Historial guardado en GitHub")
-            except subprocess.CalledProcessError as e:
-                st.error(f"Error: {e.stderr.decode() if e.stderr else e}")
+        st.info("💡 Para guardar en GitHub, usá la terminal de Codespaces con `git push`.")
 
 
 # ============ TAB 3: ESTADÍSTICAS ============
@@ -291,7 +299,7 @@ with tab_estadisticas:
         df = pd.read_csv(ARCHIVO)
         st.markdown(f"Analizando **{len(df)} filas** de historial.")
 
-        # ============ SCORE COMBINADO ============
+        # SCORE COMBINADO
         st.markdown("## 🎯 Score combinado (top 20)")
         st.markdown("Combina las 5 reglas ponderadas según su confiabilidad.")
         ranking = reglas.score_combinado(df)
@@ -311,7 +319,7 @@ with tab_estadisticas:
 
         st.markdown("---")
 
-        # ============ FRECUENCIA TOTAL ============
+        # FRECUENCIA TOTAL
         st.markdown("## 📊 Frecuencia total (los que más salieron)")
         top = reglas.regla_frecuencia_total(df)
         cols = st.columns(5)
@@ -330,7 +338,7 @@ with tab_estadisticas:
 
         st.markdown("---")
 
-        # ============ SALIDORES RECIENTES ============
+        # SALIDORES RECIENTES
         st.markdown("## 🔥 Salidores recientes (últimos 30 días)")
         top = reglas.regla_salidores_recientes(df, 30)
         cols = st.columns(5)
@@ -349,7 +357,7 @@ with tab_estadisticas:
 
         st.markdown("---")
 
-        # ============ ATRASADOS ============
+        # ATRASADOS
         st.markdown("## 🧊 Atrasados (hace más días que no salen)")
         top = reglas.regla_atrasados(df)
         cols = st.columns(5)
@@ -368,7 +376,7 @@ with tab_estadisticas:
 
         st.markdown("---")
 
-        # ============ POR DÍA DE LA SEMANA ============
+        # POR DÍA DE LA SEMANA
         hoy = datetime.now().weekday()
         nombre_dia = reglas.DIAS_ES[hoy]
         st.markdown(f"## 📅 Frecuencia por día ({nombre_dia})")
@@ -389,7 +397,7 @@ with tab_estadisticas:
 
         st.markdown("---")
 
-        # ============ POR DECENA ============
+        # POR DECENA
         st.markdown("## 🔢 Decenas más frecuentes")
         top = reglas.regla_por_decena(df)
         cols = st.columns(5)
@@ -406,7 +414,7 @@ with tab_estadisticas:
                     unsafe_allow_html=True
                 )
 
-        # ============ PREPARAR OPCIONES PARA MÉTODOS ============
+        # OPCIONES PARA MÉTODOS
         df_sorted = df.copy()
         df_sorted["fecha_dt"] = pd.to_datetime(df_sorted["fecha"], format="%d/%m/%Y", errors="coerce")
         df_sorted = df_sorted.sort_values("fecha_dt", ascending=False)
@@ -414,7 +422,7 @@ with tab_estadisticas:
             lambda r: f"{r['fecha']} - {r['turno']}", axis=1
         ).tolist()
 
-        # ============ MÉTODO TESLA ============
+        # MÉTODO TESLA
         st.markdown("---")
         st.markdown("## 🎩 Método Tesla")
         st.markdown("Seleccioná un sorteo base y el método calcula los números sugeridos.")
@@ -461,7 +469,7 @@ with tab_estadisticas:
                         unsafe_allow_html=True
                     )
 
-        # ============ RENDIMIENTO TESLA ============
+        # RENDIMIENTO TESLA
         st.markdown("---")
         st.markdown("## 📊 Rendimiento del Método Tesla en el historial")
 
@@ -493,7 +501,7 @@ with tab_estadisticas:
             st.markdown("### ✅ Números acertados EN LOS 20")
             mostrar_cuadros_verdes(stats["aciertos_20"])
 
-        # ============ MÉTODO PIRÁMIDE ============
+        # MÉTODO PIRÁMIDE
         st.markdown("---")
         st.markdown("## 🔺 Método de la Pirámide")
         st.markdown("Elegí un sorteo del historial, **o** escribí un número propio (máx 10 dígitos).")
@@ -576,7 +584,7 @@ with tab_estadisticas:
         else:
             st.info("Elegí un sorteo o escribí un número para ver las jugadas.")
 
-        # ============ RENDIMIENTO PIRÁMIDE ============
+        # RENDIMIENTO PIRÁMIDE
         st.markdown("---")
         st.markdown("## 📊 Rendimiento del Método Pirámide en el historial")
         st.markdown("Aplica la pirámide a la **fecha de cada día** y compara contra los 3 sorteos de ese día.")
