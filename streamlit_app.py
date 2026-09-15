@@ -13,7 +13,7 @@ def _asegurar_libreria(modulo, paquete):
 _asegurar_libreria("bs4", "beautifulsoup4")
 _asegurar_libreria("requests", "requests")
 _asegurar_libreria("pandas", "pandas")
-_asegurar_libreria("lxml", "lxml")
+#_asegurar_libreria("lxml", "lxml")
 
 # ============ IMPORTS NORMALES ============
 import requests
