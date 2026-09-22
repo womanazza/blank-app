@@ -360,6 +360,8 @@ with tab_combinado:
     st.markdown("### 🧠 Análisis combinado de métodos")
 
     import metodos
+    import metodo_tesla
+    import metodo_piramide
 
     if not os.path.exists(ARCHIVO_HISTORIAL):
         st.warning("Todavía no hay historial. Andá a 'Actualizar historial' y traé datos primero.")
@@ -403,7 +405,62 @@ with tab_combinado:
         else:
             st.markdown("**Sin número base** — algunos métodos no van a devolver resultados.")
 
-        # --- Ejecutar todos los métodos ---
+        # Preparar sorteo elegido
+        sorteo_elegido = None
+        if seleccion_comb and seleccion_comb != "(ninguno)":
+            idx_comb = opciones_comb.index(seleccion_comb)
+            sorteo_elegido = df_sorted_comb.iloc[idx_comb].to_dict()
+
+        st.markdown("---")
+
+        # ============ MÉTODO TESLA ============
+        st.markdown("## 🎩 Método Tesla")
+        if num_base_comb:
+            st.markdown(f"**Número base:** `{num_base_comb}`")
+            analisis_tesla = metodo_tesla.analizar_numero(num_base_comb)
+            jugadas_tesla = metodo_tesla.generar_jugadas(analisis_tesla)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                mostrar_jugadas_en_caja("Ambos (2 cifras)", jugadas_tesla["ambos"])
+            with col2:
+                mostrar_jugadas_en_caja("Ternos (3 cifras)", jugadas_tesla["ternos"])
+            with col3:
+                mostrar_jugadas_en_caja("Números completos (4 cifras)", jugadas_tesla["cuatro_cifras"])
+        else:
+            jugadas_tesla = {"ambos": [], "ternos": [], "cuatro_cifras": []}
+            st.info("Elegí un sorteo o escribí un número para ver las jugadas de Tesla.")
+
+        st.markdown("---")
+
+            # ============ MÉTODO PIRÁMIDE ============
+        st.markdown("## 🔺 Método de la Pirámide")
+        if num_base_comb:
+            st.markdown(f"**Número base:** `{num_base_comb}`")
+            jugadas_pir = metodo_piramide.generar_jugadas(num_base_comb)
+            filas_pir = jugadas_pir["filas"]
+
+            st.markdown("#### 🔺 Pirámide")
+            for fila in filas_pir:
+                html_fila = "".join([
+                    f'<span style="display:inline-block; width:28px; height:28px; '
+                    f'line-height:28px; text-align:center; margin:2px; '
+                    f'background:#222; border-radius:6px; font-weight:bold; '
+                    f'color:{"#ff3333" if len(fila) == 1 else "white"};">{d}</span>'
+                    for d in fila
+                ])
+                st.markdown(f'<div style="text-align:center;">{html_fila}</div>', unsafe_allow_html=True)
+
+            st.markdown("### 🎯 Jugadas sugeridas")
+            col1, col2 = st.columns(2)
+            with col1:
+                mostrar_jugadas_en_caja("Ambos (2 cifras)", jugadas_pir["ambos"])
+            with col2:
+                mostrar_jugadas_en_caja("Ternos (3 cifras)", jugadas_pir["ternos"])
+        else:
+            jugadas_pir = {"ambos": [], "ternos": [], "cuatro_cifras": []}
+            st.info("Elegí un sorteo o escribí un número para ver las jugadas de la Pirámide.")
+
+        # ============ LOS DEMÁS MÉTODOS ============
         METODOS = [
             ("Redoble", metodos.metodo_redoble),
             ("Suma/Resta 11", metodos.metodo_suma_resta_11),
@@ -417,11 +474,6 @@ with tab_combinado:
             ("Ambos repetidos", metodos.metodo_ambos_repetidos),
             ("Animales", metodos.metodo_animales),
         ]
-        # Preparar el sorteo elegido
-        sorteo_elegido = None
-        if seleccion_comb and seleccion_comb != "(ninguno)":
-            idx_comb = opciones_comb.index(seleccion_comb)
-            sorteo_elegido = df_sorted_comb.iloc[idx_comb].to_dict()
 
         resultados_por_metodo = {}
         for nombre, funcion in METODOS:
@@ -436,9 +488,7 @@ with tab_combinado:
                 resultado = []
             resultados_por_metodo[nombre] = resultado
 
-        st.markdown("---")
         st.markdown("### Resultados por método")
-
         cols = st.columns(3)
         for i, (nombre, _) in enumerate(METODOS):
             with cols[i % 3]:
@@ -519,30 +569,38 @@ with tab_combinado:
         # --- Score combinado ---
         st.markdown("---")
         st.markdown("## 🎯 Score combinado (Top 20)")
-        st.markdown("Suma: +1 por método, +1 por bonus aplicado, +1/2/3 por estadísticas, +1 por Tesla/Pirámide si buscaste un número.")
+        st.markdown("Suma: +1 por método, +1 por bonus, y +3/+2/+1 por estadísticas.")
 
-        # --- 1) Base: contar votos de los métodos ---
         contador = Counter()
+
+        # Tesla
+        for n in set(jugadas_tesla.get("ambos", [])):
+            contador[n] += 1
+
+        # Pirámide
+        for n in set(jugadas_pir.get("ambos", [])):
+            contador[n] += 1
+
+        # Los 11 métodos
         for nombre, _ in METODOS:
-            vistos_en_metodo = set(resultados_por_metodo[nombre])
-            for num in vistos_en_metodo:
+            vistos = set(resultados_por_metodo[nombre])
+            for num in vistos:
                 contador[num] += 1
 
-        # --- 2) Bonus del día ---
+        # Bonus del día
         for info in bonus_aplicados:
             if info["aplica"] and info["numeros"]:
                 for num in info["numeros"]:
                     if num in contador:
                         contador[num] += 1
 
-        # --- 3) Puntos extra por estadísticas ---
+        # Puntos extra por estadísticas
         import reglas
         try:
-            ranking_stats = reglas.score_combinado(df_comb)  # top 20
+            ranking_stats = reglas.score_combinado(df_comb)
         except Exception:
             ranking_stats = []
 
-        # Asignar puntos: top 1-7 = +3, 8-14 = +2, 15-20 = +1
         puntos_stats = {}
         for pos, (num, _) in enumerate(ranking_stats[:20]):
             if pos < 7:
@@ -556,38 +614,6 @@ with tab_combinado:
             if num in contador:
                 contador[num] += pts
 
-        # --- 4) Puntos extra por Tesla/Pirámide (solo si el usuario buscó un número) ---
-        puntos_tesla = set()
-        puntos_piramide = set()
-
-        if num_base_comb:
-            try:
-                import metodo_tesla
-                analisis = metodo_tesla.analizar_numero(num_base_comb)
-                jugadas = metodo_tesla.generar_jugadas(analisis)
-                todos_tesla = set(jugadas["ambos"]) | set(jugadas["ternos"]) | set(jugadas["cuatro_cifras"])
-                # Nos quedamos solo con los de 2 cifras (que son los que pueden coincidir con contador)
-                puntos_tesla = {n for n in todos_tesla if len(n) == 2}
-            except Exception:
-                pass
-
-            try:
-                import metodo_piramide
-                jugadas_pir = metodo_piramide.generar_jugadas(num_base_comb)
-                todos_pir = set(jugadas_pir["ambos"]) | set(jugadas_pir["ternos"]) | set(jugadas_pir["cuatro_cifras"])
-                puntos_piramide = {n for n in todos_pir if len(n) == 2}
-            except Exception:
-                pass
-
-        for num in puntos_tesla:
-            if num in contador:
-                contador[num] += 1
-
-        for num in puntos_piramide:
-            if num in contador:
-                contador[num] += 1
-
-        # --- Top 20 final ---
         top_comb = contador.most_common(20)
 
         if top_comb:
@@ -606,20 +632,6 @@ with tab_combinado:
                 fondo = f"rgb({r},{g},{b})"
                 borde_color = "#fff" if intensidad < 0.5 else "#7ef77e"
 
-                # Mostrar el desglose del score
-                detalle = []
-                for n_met in [n for n, _ in METODOS]:
-                    if num in set(resultados_por_metodo[n_met]):
-                        detalle.append(f"+1 {n_met[:8]}")
-                if num in puntos_stats:
-                    detalle.append(f"+{puntos_stats[num]} stats")
-                if num in puntos_tesla:
-                    detalle.append("+1 Tesla")
-                if num in puntos_piramide:
-                    detalle.append("+1 Pirámide")
-                if any(num in info["numeros"] for info in bonus_aplicados if info["aplica"]):
-                    detalle.append("+1 bonus")
-
                 with cols_top[i % 8]:
                     st.markdown(
                         f"""
@@ -635,8 +647,6 @@ with tab_combinado:
                         """,
                         unsafe_allow_html=True
                     )
-                    with st.expander("ver detalle"):
-                        st.caption(" · ".join(detalle) if detalle else "sin desglose")
         else:
             st.info("Ningún método devolvió resultados.")
 
@@ -764,50 +774,7 @@ with tab_estadisticas:
                     unsafe_allow_html=True
                 )
 
-        df_sorted = df.copy()
-        df_sorted["fecha_dt"] = pd.to_datetime(df_sorted["fecha"], format="%d/%m/%Y", errors="coerce")
-        df_sorted = df_sorted.sort_values("fecha_dt", ascending=False)
-        opciones = df_sorted.apply(
-            lambda r: f"{r['fecha']} - {r['turno']}", axis=1
-        ).tolist()
-
-        # MÉTODO TESLA
-        st.markdown("---")
-        st.markdown("## 🎩 Método Tesla")
-        st.markdown("Elegí un sorteo del historial, **o** escribí un número propio (máx 10 dígitos).")
-
-        col_a, col_b = st.columns([1, 1])
-        with col_a:
-            seleccion = st.selectbox("Sorteo base (opcional):", ["(ninguno)"] + opciones[:50], key="tesla_base")
-        with col_b:
-            numero_manual_tesla = st.text_input("Número propio (opcional, máx 10 dígitos):", key="tesla_manual", max_chars=10, placeholder="Ej: 4904")
-
-        num_base = None
-        origen = ""
-        if numero_manual_tesla and numero_manual_tesla.isdigit():
-            num_base = numero_manual_tesla.zfill(4)
-            origen = "Número propio"
-        elif seleccion and seleccion != "(ninguno)":
-            idx = opciones.index(seleccion)
-            fila = df_sorted.iloc[idx]
-            num_base = str(fila["n1"]).zfill(4)
-            origen = f"Sorteo: {seleccion}"
-
-        if num_base:
-            st.markdown(f"### Número base: **{num_base}** ({origen})")
-            analisis = metodo_tesla.analizar_numero(num_base)
-            jugadas = metodo_tesla.generar_jugadas(analisis)
-            st.markdown("### 🎯 Jugadas sugeridas")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                mostrar_jugadas_en_caja("Ambos (2 cifras)", jugadas["ambos"])
-            with col2:
-                mostrar_jugadas_en_caja("Ternos (3 cifras)", jugadas["ternos"])
-            with col3:
-                mostrar_jugadas_en_caja("Números completos (4 cifras)", jugadas["cuatro_cifras"])
-        else:
-            st.info("Elegí un sorteo o escribí un número para ver las jugadas.")
-
+        # ============ RENDIMIENTOS ============
         st.markdown("---")
         st.markdown("## 📊 Rendimiento del Método Tesla en el historial")
         stats = metodo_tesla.medir_metodo_tesla(df)
@@ -828,55 +795,9 @@ with tab_estadisticas:
             st.markdown("### ✅ Números acertados EN LOS 20")
             mostrar_cuadros_verdes(stats["aciertos_20"])
 
-        # MÉTODO PIRÁMIDE
-        st.markdown("---")
-        st.markdown("## 🔺 Método de la Pirámide")
-        st.markdown("Elegí un sorteo del historial, **o** escribí un número propio (máx 10 dígitos).")
-
-        col_a, col_b = st.columns([1, 1])
-        with col_a:
-            seleccion_pir = st.selectbox("Sorteo base (opcional):", ["(ninguno)"] + opciones[:50], key="pir_base")
-        with col_b:
-            numero_manual = st.text_input("Número propio (opcional, máx 10 dígitos):", key="pir_manual", max_chars=10, placeholder="Ej: 15092026")
-
-        num_base_pir = None
-        origen = ""
-        if numero_manual and numero_manual.isdigit():
-            num_base_pir = numero_manual
-            origen = "Número propio"
-        elif seleccion_pir and seleccion_pir != "(ninguno)":
-            idx_pir = opciones.index(seleccion_pir)
-            fila_pir = df_sorted.iloc[idx_pir]
-            num_base_pir = str(fila_pir["n1"]).zfill(4)
-            origen = f"Sorteo: {seleccion_pir}"
-
-        if num_base_pir:
-            st.markdown(f"### Número base: **{num_base_pir}** ({origen})")
-            jugadas_pir = metodo_piramide.generar_jugadas(num_base_pir)
-            filas_pir = jugadas_pir["filas"]
-            st.markdown("#### 🔺 Pirámide")
-            for fila in filas_pir:
-                html_fila = "".join([
-                    f'<span style="display:inline-block; width:28px; height:28px; '
-                    f'line-height:28px; text-align:center; margin:2px; '
-                    f'background:#222; border-radius:6px; font-weight:bold; '
-                    f'color:{"#ff3333" if len(fila) == 1 else "white"};">{d}</span>'
-                    for d in fila
-                ])
-                st.markdown(f'<div style="text-align:center;">{html_fila}</div>', unsafe_allow_html=True)
-            st.markdown("### 🎯 Jugadas sugeridas")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                mostrar_jugadas_en_caja("Ambos (2 cifras)", jugadas_pir["ambos"])
-            with col2:
-                mostrar_jugadas_en_caja("Ternos (3 cifras)", jugadas_pir["ternos"])
-            with col3:
-                mostrar_jugadas_en_caja("Números completos (4 cifras)", jugadas_pir["cuatro_cifras"])
-        else:
-            st.info("Elegí un sorteo o escribí un número para ver las jugadas.")
-
         st.markdown("---")
         st.markdown("## 📊 Rendimiento del Método Pirámide en el historial")
+        st.markdown("Aplica la pirámide a la **fecha de cada día** y compara contra los 3 sorteos de ese día.")
         stats_pir = metodo_piramide.medir_metodo_piramide(df)
         if stats_pir["total_20"] == 0:
             st.info("Necesitás historial cargado para medir el método.")
@@ -895,6 +816,7 @@ with tab_estadisticas:
             st.markdown("### ✅ Números acertados EN LOS 20")
             mostrar_cuadros_verdes(stats_pir["aciertos_20"])
 
+
 # ============ TAB: SUEÑOS Y OFICIOS ============
 with tab_suenios:
     st.markdown("### 🌙 Sueños y Oficios")
@@ -902,7 +824,6 @@ with tab_suenios:
 
     import significados
 
-      # --- Buscador ---
     st.markdown("#### 🔍 Buscador")
     st.markdown("Escribí un número (ej: 44) o un nombre (ej: La Cárcel).")
 
@@ -917,7 +838,6 @@ with tab_suenios:
     if consulta:
         consulta_limpia = consulta.strip()
 
-        # Si es un número, mostramos sueño y oficio
         if consulta_limpia.isdigit():
             numero = consulta_limpia.zfill(2)[-2:]
             info = significados.buscar_por_numero(numero)
@@ -949,8 +869,6 @@ with tab_suenios:
                     """,
                     unsafe_allow_html=True
                 )
-
-        # Si es texto, buscamos coincidencias
         else:
             resultados = significados.buscar_por_texto(consulta_limpia)
             if resultados:
@@ -979,8 +897,8 @@ with tab_suenios:
             else:
                 st.info(f"No se encontró nada para '{consulta_limpia}'.")
 
+    st.markdown("---")
 
-    # --- Tablas completas ---
     sub_suenios, sub_oficios = st.tabs(["🌙 Sueños (0-99)", "🔨 Oficios (0-99)"])
 
     with sub_suenios:
@@ -1006,8 +924,8 @@ with tab_suenios:
                     unsafe_allow_html=True
                 )
 
-        with sub_oficios:
-            cols = st.columns(8)
+    with sub_oficios:
+        cols = st.columns(8)
         for i, (num, nombre) in enumerate(significados.OFICIOS.items()):
             with cols[i % 8]:
                 st.markdown(
@@ -1028,6 +946,8 @@ with tab_suenios:
                     """,
                     unsafe_allow_html=True
                 )
+
+
 # ============ TAB 5: DATOS ============
 with tab_datos:
     st.markdown("### Datos guardados")

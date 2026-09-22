@@ -1,12 +1,17 @@
 """
 Método de la Pirámide (Piramidación) aplicado a la Quiniela.
-Suma sucesivamente los dígitos de a pares, quedándose con el último dígito
-cuando la suma es >= 10, hasta llegar a la punta de la pirámide.
+Se suman los dígitos de a pares hasta llegar a un solo número (la punta).
+
+Lógica corregida:
+- Ambos (2 cifras): punta + cada dígito de la penúltima fila.
+- Ternos (3 cifras): punta + dígito de la penúltima + valor único de la fila anterior.
+- Cuaternos: se eliminaron (no se usan).
 """
 import pandas as pd
 
 
 def reducir_fila(fila):
+    """Dada una lista de dígitos, devuelve la siguiente fila sumando de a pares (módulo 10)."""
     nueva = []
     for i in range(len(fila) - 1):
         suma = int(fila[i]) + int(fila[i + 1])
@@ -15,7 +20,12 @@ def reducir_fila(fila):
 
 
 def construir_piramide(numero_base):
+    """Construye la pirámide completa como lista de filas."""
     numero_str = str(numero_base).strip()
+    if len(numero_str) > 4:
+        numero_str = numero_str[:4]
+    numero_str = numero_str.zfill(4)
+
     filas = [[d for d in numero_str]]
     while len(filas[-1]) > 1:
         filas.append(reducir_fila(filas[-1]))
@@ -23,50 +33,53 @@ def construir_piramide(numero_base):
 
 
 def generar_jugadas(numero_base):
-    filas = construir_piramide(numero_base)
+    """
+    Genera ambos y ternos según la lógica de la pirámide:
+    - Ambos: punta + cada dígito de la penúltima fila.
+    - Ternos: punta + dígito de la penúltima + valor único de la antepenúltima.
+    """
+    numero_str = str(numero_base).strip()
+    if len(numero_str) > 4:
+        numero_str = numero_str[:4]
+    numero_str = numero_str.zfill(4)
+
+    filas = construir_piramide(numero_str)
+    # filas[0] = base (4 dígitos)
+    # filas[1] = 3 dígitos
+    # filas[2] = 2 dígitos (penúltima)
+    # filas[3] = 1 dígito (punta)
+
     punta = filas[-1][0]
     penultima = filas[-2] if len(filas) >= 2 else filas[-1]
-    base = filas[0]
+    antepenultima = filas[-3] if len(filas) >= 3 else penultima
 
     ambos = set()
     ternos = set()
-    cuatro = set()
 
-    # Combinaciones con la punta y la penúltima
+    # Ambos: punta + cada dígito de la penúltima
     for d in penultima:
         ambos.add(f"{punta}{d}")
-        ambos.add(f"{d}{punta}")
 
-    # Ternos
-    if len(penultima) >= 3:
-        ternos.add("".join(penultima[:3]))
-        ternos.add("".join(penultima[-3:]))
-    for i in range(len(penultima) - 1):
-        ternos.add(f"{punta}{penultima[i]}{penultima[i+1]}")
-        ternos.add(f"{penultima[i]}{penultima[i+1]}{punta}")
-
-    # 4 cifras
-    if len(base) >= 4:
-        cuatro.add("".join(base[:4]))
-        cuatro.add("".join(base[-4:]))
-    if len(penultima) >= 4:
-        cuatro.add("".join(penultima[:4]))
+    # Ternos: punta + dígito penúltima + valor único de antepenúltima
+    valores_unicos = list(dict.fromkeys(antepenultima))
+    for d2 in penultima:
+        for d3 in valores_unicos:
+            ternos.add(f"{punta}{d2}{d3}")
 
     ambos = sorted({j for j in ambos if len(j) == 2})
     ternos = sorted({j for j in ternos if len(j) == 3})
-    cuatro = sorted({j for j in cuatro if len(j) == 4})
 
     return {
         "ambos": ambos,
         "ternos": ternos,
-        "cuatro_cifras": cuatro,
+        "cuatro_cifras": [],  # Ya no se usan
         "punta": punta,
         "filas": filas,
     }
 
 
 def _chequear_numero(num_real, predichos_ambos, predichos_ternos, predichos_4):
-    """Devuelve True si el número real (o sus terminaciones) está en las jugadas"""
+    """Devuelve True si el número real coincide con alguno de los predichos."""
     term2 = num_real[-2:]
     term3 = num_real[-3:]
     return (num_real in predichos_4 or term2 in predichos_ambos
@@ -91,7 +104,6 @@ def medir_metodo_piramide(df):
     total_10 = 0
     total_20 = 0
 
-    # Agrupar por fecha (día)
     fechas_unicas = df["fecha"].unique()
 
     for fecha_str in fechas_unicas:
