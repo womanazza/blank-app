@@ -519,20 +519,75 @@ with tab_combinado:
         # --- Score combinado ---
         st.markdown("---")
         st.markdown("## 🎯 Score combinado (Top 20)")
-        st.markdown("+1 por cada método donde aparece, +1 extra por cada bonus del día que aplica.")
+        st.markdown("Suma: +1 por método, +1 por bonus aplicado, +1/2/3 por estadísticas, +1 por Tesla/Pirámide si buscaste un número.")
 
+        # --- 1) Base: contar votos de los métodos ---
         contador = Counter()
         for nombre, _ in METODOS:
             vistos_en_metodo = set(resultados_por_metodo[nombre])
             for num in vistos_en_metodo:
                 contador[num] += 1
 
+        # --- 2) Bonus del día ---
         for info in bonus_aplicados:
             if info["aplica"] and info["numeros"]:
                 for num in info["numeros"]:
                     if num in contador:
                         contador[num] += 1
 
+        # --- 3) Puntos extra por estadísticas ---
+        import reglas
+        try:
+            ranking_stats = reglas.score_combinado(df_comb)  # top 20
+        except Exception:
+            ranking_stats = []
+
+        # Asignar puntos: top 1-7 = +3, 8-14 = +2, 15-20 = +1
+        puntos_stats = {}
+        for pos, (num, _) in enumerate(ranking_stats[:20]):
+            if pos < 7:
+                puntos_stats[num] = 3
+            elif pos < 14:
+                puntos_stats[num] = 2
+            else:
+                puntos_stats[num] = 1
+
+        for num, pts in puntos_stats.items():
+            if num in contador:
+                contador[num] += pts
+
+        # --- 4) Puntos extra por Tesla/Pirámide (solo si el usuario buscó un número) ---
+        puntos_tesla = set()
+        puntos_piramide = set()
+
+        if num_base_comb:
+            try:
+                import metodo_tesla
+                analisis = metodo_tesla.analizar_numero(num_base_comb)
+                jugadas = metodo_tesla.generar_jugadas(analisis)
+                todos_tesla = set(jugadas["ambos"]) | set(jugadas["ternos"]) | set(jugadas["cuatro_cifras"])
+                # Nos quedamos solo con los de 2 cifras (que son los que pueden coincidir con contador)
+                puntos_tesla = {n for n in todos_tesla if len(n) == 2}
+            except Exception:
+                pass
+
+            try:
+                import metodo_piramide
+                jugadas_pir = metodo_piramide.generar_jugadas(num_base_comb)
+                todos_pir = set(jugadas_pir["ambos"]) | set(jugadas_pir["ternos"]) | set(jugadas_pir["cuatro_cifras"])
+                puntos_piramide = {n for n in todos_pir if len(n) == 2}
+            except Exception:
+                pass
+
+        for num in puntos_tesla:
+            if num in contador:
+                contador[num] += 1
+
+        for num in puntos_piramide:
+            if num in contador:
+                contador[num] += 1
+
+        # --- Top 20 final ---
         top_comb = contador.most_common(20)
 
         if top_comb:
@@ -551,6 +606,20 @@ with tab_combinado:
                 fondo = f"rgb({r},{g},{b})"
                 borde_color = "#fff" if intensidad < 0.5 else "#7ef77e"
 
+                # Mostrar el desglose del score
+                detalle = []
+                for n_met in [n for n, _ in METODOS]:
+                    if num in set(resultados_por_metodo[n_met]):
+                        detalle.append(f"+1 {n_met[:8]}")
+                if num in puntos_stats:
+                    detalle.append(f"+{puntos_stats[num]} stats")
+                if num in puntos_tesla:
+                    detalle.append("+1 Tesla")
+                if num in puntos_piramide:
+                    detalle.append("+1 Pirámide")
+                if any(num in info["numeros"] for info in bonus_aplicados if info["aplica"]):
+                    detalle.append("+1 bonus")
+
                 with cols_top[i % 8]:
                     st.markdown(
                         f"""
@@ -566,6 +635,8 @@ with tab_combinado:
                         """,
                         unsafe_allow_html=True
                     )
+                    with st.expander("ver detalle"):
+                        st.caption(" · ".join(detalle) if detalle else "sin desglose")
         else:
             st.info("Ningún método devolvió resultados.")
 
