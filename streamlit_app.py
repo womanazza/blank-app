@@ -54,11 +54,12 @@ st.markdown(
 
 st.title("Quiniela San Juan")
 
-tab_hoy, tab_historial, tab_combinado, tab_estadisticas, tab_datos = st.tabs([
+tab_hoy, tab_historial, tab_combinado, tab_estadisticas, tab_suenios, tab_datos = st.tabs([
     "📅 Hoy",
     "🔄 Actualizar historial",
     "🧠 Análisis combinado",
     "📈 Estadísticas",
+    "🌙 Sueños y Oficios",
     "📊 Datos guardados"
 ])
 
@@ -162,7 +163,6 @@ def obtener_sorteos(fecha):
 
 
 def guardar_dias_en_historial(dias=7):
-    """Recorre los últimos N días y los agrega al historial. Devuelve (nuevos, total, errores)."""
     if os.path.exists(ARCHIVO_HISTORIAL):
         df_previo = pd.read_csv(ARCHIVO_HISTORIAL)
         fechas_hechas = set(df_previo["fecha"].unique())
@@ -206,17 +206,15 @@ def guardar_dias_en_historial(dias=7):
 
 
 def auto_guardar_si_corresponde():
-    """Si pasaron más de 12 horas desde el último guardado, guarda los últimos 7 días."""
     ahora = datetime.now()
     if os.path.exists(ARCHIVO_ULTIMO_GUARDADO):
         try:
             with open(ARCHIVO_ULTIMO_GUARDADO, "r") as f:
                 ultimo = datetime.fromisoformat(f.read().strip())
             if (ahora - ultimo) < timedelta(hours=12):
-                return 0, 0  # no hace falta guardar
+                return 0, 0
         except Exception:
             pass
-    # Guardar
     try:
         nuevos, total, _ = guardar_dias_en_historial(7)
         with open(ARCHIVO_ULTIMO_GUARDADO, "w") as f:
@@ -227,7 +225,6 @@ def auto_guardar_si_corresponde():
 
 
 def mostrar_cuadros_verdes(aciertos, max_mostrar=60):
-    """Muestra cuadros verdes chicos y compactos con los números acertados"""
     if not aciertos:
         st.info("Sin aciertos.")
         return
@@ -278,7 +275,7 @@ def mostrar_jugadas_en_caja(titulo, lista_numeros):
     """)
 
 
-# ============ AUTO-GUARDADO AL ABRIR ============
+# ============ AUTO-GUARDADO ============
 with st.spinner("Verificando historial..."):
     resultado = auto_guardar_si_corresponde()
     if resultado:
@@ -358,336 +355,7 @@ with tab_historial:
         st.info("💡 Para guardar en GitHub, usá la terminal de Codespaces con `git push`.")
 
 
-# ============ TAB 3: ESTADÍSTICAS ============
-with tab_estadisticas:
-    st.markdown("### Análisis estadístico de la Quiniela")
-
-    import reglas
-    import metodo_tesla
-    import metodo_piramide
-
-    if not os.path.exists(ARCHIVO_HISTORIAL):
-        st.warning("Todavía no hay historial. Andá a 'Actualizar historial' y traé datos primero.")
-    else:
-        df = pd.read_csv(ARCHIVO_HISTORIAL)
-        st.markdown(f"Analizando **{len(df)} filas** de historial.")
-
-        # SCORE COMBINADO
-        st.markdown("## 🎯 Score combinado (top 20)")
-        st.markdown("Combina las 5 reglas ponderadas según su confiabilidad.")
-        ranking = reglas.score_combinado(df)
-        cols = st.columns(5)
-        for i, (num, score) in enumerate(ranking):
-            with cols[i % 5]:
-                st.markdown(
-                    f"""
-                    <div style="border:2px solid #fff; border-radius:10px;
-                                padding:8px; text-align:center; margin:5px 0;">
-                        <div style="font-size:20px; font-weight:bold; color:#ff3333;">{num}</div>
-                        <div style="font-size:11px; color:#aaa;">score {score:.0f}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        st.markdown("---")
-
-        # FRECUENCIA TOTAL
-        st.markdown("## 📊 Frecuencia total (los que más salieron)")
-        top = reglas.regla_frecuencia_total(df)
-        cols = st.columns(5)
-        for i, (num, cant) in enumerate(top):
-            with cols[i % 5]:
-                st.markdown(
-                    f"""
-                    <div style="border:1px solid #555; border-radius:8px;
-                                padding:6px; text-align:center; margin:4px 0;">
-                        <span style="font-size:17px; font-weight:bold;">{num}</span>
-                        <span style="font-size:11px; color:#aaa;"> · {cant}x</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        st.markdown("---")
-
-        # SALIDORES RECIENTES
-        st.markdown("## 🔥 Salidores recientes (últimos 30 días)")
-        top = reglas.regla_salidores_recientes(df, 30)
-        cols = st.columns(5)
-        for i, (num, cant) in enumerate(top):
-            with cols[i % 5]:
-                st.markdown(
-                    f"""
-                    <div style="border:1px solid #555; border-radius:8px;
-                                padding:6px; text-align:center; margin:4px 0;">
-                        <span style="font-size:17px; font-weight:bold;">{num}</span>
-                        <span style="font-size:11px; color:#aaa;"> · {cant}x</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        st.markdown("---")
-
-        # ATRASADOS
-        st.markdown("## 🧊 Atrasados (hace más días que no salen)")
-        top = reglas.regla_atrasados(df)
-        cols = st.columns(5)
-        for i, (num, dias) in enumerate(top):
-            with cols[i % 5]:
-                st.markdown(
-                    f"""
-                    <div style="border:1px solid #555; border-radius:8px;
-                                padding:6px; text-align:center; margin:4px 0;">
-                        <span style="font-size:17px; font-weight:bold;">{num}</span>
-                        <span style="font-size:11px; color:#aaa;"> · {dias}d</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        st.markdown("---")
-
-        # POR DÍA DE LA SEMANA
-        hoy = datetime.now().weekday()
-        nombre_dia = reglas.DIAS_ES[hoy]
-        st.markdown(f"## 📅 Frecuencia por día ({nombre_dia})")
-        top = reglas.regla_por_dia_semana(df, hoy)
-        cols = st.columns(5)
-        for i, (num, cant) in enumerate(top):
-            with cols[i % 5]:
-                st.markdown(
-                    f"""
-                    <div style="border:1px solid #555; border-radius:8px;
-                                padding:6px; text-align:center; margin:4px 0;">
-                        <span style="font-size:17px; font-weight:bold;">{num}</span>
-                        <span style="font-size:11px; color:#aaa;"> · {cant}x</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        st.markdown("---")
-
-        # POR DECENA
-        st.markdown("## 🔢 Decenas más frecuentes")
-        top = reglas.regla_por_decena(df)
-        cols = st.columns(5)
-        for i, (dec, cant) in enumerate(top):
-            with cols[i % 5]:
-                st.markdown(
-                    f"""
-                    <div style="border:1px solid #555; border-radius:8px;
-                                padding:6px; text-align:center; margin:4px 0;">
-                        <span style="font-size:17px; font-weight:bold;">{dec}</span>
-                        <span style="font-size:11px; color:#aaa;"> · {cant}x</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        # OPCIONES PARA MÉTODOS
-        df_sorted = df.copy()
-        df_sorted["fecha_dt"] = pd.to_datetime(df_sorted["fecha"], format="%d/%m/%Y", errors="coerce")
-        df_sorted = df_sorted.sort_values("fecha_dt", ascending=False)
-        opciones = df_sorted.apply(
-            lambda r: f"{r['fecha']} - {r['turno']}", axis=1
-        ).tolist()
-
-        # MÉTODO TESLA
-        st.markdown("---")
-        st.markdown("## 🎩 Método Tesla")
-        st.markdown("Elegí un sorteo del historial, **o** escribí un número propio (máx 10 dígitos).")
-
-        col_a, col_b = st.columns([1, 1])
-        with col_a:
-            seleccion = st.selectbox(
-                "Sorteo base (opcional):",
-                ["(ninguno)"] + opciones[:50],
-                key="tesla_base"
-            )
-        with col_b:
-            numero_manual_tesla = st.text_input(
-                "Número propio (opcional, máx 10 dígitos):",
-                key="tesla_manual",
-                max_chars=10,
-                placeholder="Ej: 4904"
-            )
-
-        num_base = None
-        origen = ""
-        if numero_manual_tesla and numero_manual_tesla.isdigit():
-            num_base = numero_manual_tesla.zfill(4)
-            origen = "Número propio"
-        elif seleccion and seleccion != "(ninguno)":
-            idx = opciones.index(seleccion)
-            fila = df_sorted.iloc[idx]
-            num_base = str(fila["n1"]).zfill(4)
-            origen = f"Sorteo: {seleccion}"
-
-        if num_base:
-            st.markdown(f"### Número base: **{num_base}** ({origen})")
-
-            analisis = metodo_tesla.analizar_numero(num_base)
-            jugadas = metodo_tesla.generar_jugadas(analisis)
-
-            st.markdown("### 🎯 Jugadas sugeridas")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                mostrar_jugadas_en_caja("Ambos (2 cifras)", jugadas["ambos"])
-            with col2:
-                mostrar_jugadas_en_caja("Ternos (3 cifras)", jugadas["ternos"])
-            with col3:
-                mostrar_jugadas_en_caja("Números completos (4 cifras)", jugadas["cuatro_cifras"])
-        else:
-            st.info("Elegí un sorteo o escribí un número para ver las jugadas.")
-
-        # RENDIMIENTO TESLA
-        st.markdown("---")
-        st.markdown("## 📊 Rendimiento del Método Tesla en el historial")
-
-        stats = metodo_tesla.medir_metodo_tesla(df)
-
-        if stats["total"] == 0:
-            st.info("Necesitás al menos 2 sorteos cargados para medir el método.")
-        else:
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.metric("Aciertos a la cabeza",
-                          f"{len(stats['aciertos_cabeza'])}/{stats['total']}",
-                          f"{100*len(stats['aciertos_cabeza'])/stats['total']:.1f}%")
-            with c2:
-                st.metric("Aciertos en los primeros 10",
-                          f"{len(stats['aciertos_10'])}/{stats['total']}",
-                          f"{100*len(stats['aciertos_10'])/stats['total']:.1f}%")
-            with c3:
-                st.metric("Aciertos en los 20",
-                          f"{len(stats['aciertos_20'])}/{stats['total']}",
-                          f"{100*len(stats['aciertos_20'])/stats['total']:.1f}%")
-
-            st.markdown("### ✅ Números acertados A LA CABEZA")
-            mostrar_cuadros_verdes(stats["aciertos_cabeza"])
-
-            st.markdown("### ✅ Números acertados EN LOS PRIMEROS 10")
-            mostrar_cuadros_verdes(stats["aciertos_10"])
-
-            st.markdown("### ✅ Números acertados EN LOS 20")
-            mostrar_cuadros_verdes(stats["aciertos_20"])
-
-        # MÉTODO PIRÁMIDE
-        st.markdown("---")
-        st.markdown("## 🔺 Método de la Pirámide")
-        st.markdown("Elegí un sorteo del historial, **o** escribí un número propio (máx 10 dígitos).")
-
-        col_a, col_b = st.columns([1, 1])
-        with col_a:
-            seleccion_pir = st.selectbox(
-                "Sorteo base (opcional):",
-                ["(ninguno)"] + opciones[:50],
-                key="pir_base"
-            )
-        with col_b:
-            numero_manual = st.text_input(
-                "Número propio (opcional, máx 10 dígitos):",
-                key="pir_manual",
-                max_chars=10,
-                placeholder="Ej: 15092026"
-            )
-
-        num_base_pir = None
-        origen = ""
-        if numero_manual and numero_manual.isdigit():
-            num_base_pir = numero_manual
-            origen = "Número propio"
-        elif seleccion_pir and seleccion_pir != "(ninguno)":
-            idx_pir = opciones.index(seleccion_pir)
-            fila_pir = df_sorted.iloc[idx_pir]
-            num_base_pir = str(fila_pir["n1"]).zfill(4)
-            origen = f"Sorteo: {seleccion_pir}"
-
-        if num_base_pir:
-            st.markdown(f"### Número base: **{num_base_pir}** ({origen})")
-
-            jugadas_pir = metodo_piramide.generar_jugadas(num_base_pir)
-            filas_pir = jugadas_pir["filas"]
-
-            st.markdown("#### 🔺 Pirámide")
-            for fila in filas_pir:
-                html_fila = "".join([
-                    f'<span style="display:inline-block; width:28px; height:28px; '
-                    f'line-height:28px; text-align:center; margin:2px; '
-                    f'background:#222; border-radius:6px; font-weight:bold; '
-                    f'color:{"#ff3333" if len(fila) == 1 else "white"};">{d}</span>'
-                    for d in fila
-                ])
-                st.markdown(
-                    f'<div style="text-align:center;">{html_fila}</div>',
-                    unsafe_allow_html=True
-                )
-
-            st.markdown("### 🎯 Jugadas sugeridas")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                mostrar_jugadas_en_caja("Ambos (2 cifras)", jugadas_pir["ambos"])
-            with col2:
-                mostrar_jugadas_en_caja("Ternos (3 cifras)", jugadas_pir["ternos"])
-            with col3:
-                mostrar_jugadas_en_caja("Números completos (4 cifras)", jugadas_pir["cuatro_cifras"])
-        else:
-            st.info("Elegí un sorteo o escribí un número para ver las jugadas.")
-
-        # RENDIMIENTO PIRÁMIDE
-        st.markdown("---")
-        st.markdown("## 📊 Rendimiento del Método Pirámide en el historial")
-        st.markdown("Aplica la pirámide a la **fecha de cada día** y compara contra los 3 sorteos de ese día.")
-
-        stats_pir = metodo_piramide.medir_metodo_piramide(df)
-
-        if stats_pir["total_20"] == 0:
-            st.info("Necesitás historial cargado para medir el método.")
-        else:
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.metric(
-                    "Aciertos a la cabeza",
-                    f"{len(stats_pir['aciertos_cabeza'])}/{stats_pir['total_cabeza']}",
-                    f"{100*len(stats_pir['aciertos_cabeza'])/stats_pir['total_cabeza']:.1f}%"
-                )
-            with c2:
-                st.metric(
-                    "Aciertos en los primeros 10",
-                    f"{len(stats_pir['aciertos_10'])}/{stats_pir['total_10']}",
-                    f"{100*len(stats_pir['aciertos_10'])/stats_pir['total_10']:.1f}%"
-                )
-            with c3:
-                st.metric(
-                    "Aciertos en los 20",
-                    f"{len(stats_pir['aciertos_20'])}/{stats_pir['total_20']}",
-                    f"{100*len(stats_pir['aciertos_20'])/stats_pir['total_20']:.1f}%"
-                )
-
-            st.markdown("### ✅ Números acertados A LA CABEZA")
-            mostrar_cuadros_verdes(stats_pir["aciertos_cabeza"])
-
-            st.markdown("### ✅ Números acertados EN LOS PRIMEROS 10")
-            mostrar_cuadros_verdes(stats_pir["aciertos_10"])
-
-            st.markdown("### ✅ Números acertados EN LOS 20")
-            mostrar_cuadros_verdes(stats_pir["aciertos_20"])
-
-
-# ============ TAB 4: DATOS ============
-with tab_datos:
-    st.markdown("### Datos guardados")
-
-    for archivo in ["datos_quiniela.csv", ARCHIVO_HISTORIAL]:
-        if os.path.exists(archivo):
-            df = pd.read_csv(archivo)
-            st.subheader(f"📄 {archivo} ({len(df)} filas)")
-            st.dataframe(df.tail(30), width='stretch')
-        else:
-            st.info(f"📄 {archivo} todavía no existe")# ============ TAB: ANÁLISIS COMBINADO ============
+# ============ TAB: ANÁLISIS COMBINADO ============
 with tab_combinado:
     st.markdown("### 🧠 Análisis combinado de métodos")
 
@@ -699,7 +367,6 @@ with tab_combinado:
         df_comb = pd.read_csv(ARCHIVO_HISTORIAL)
         st.markdown(f"Analizando **{len(df_comb)} filas** de historial.")
 
-        # --- Selector de número base ---
         st.markdown("#### Elegí el número base (opcional)")
         df_sorted_comb = df_comb.copy()
         df_sorted_comb["fecha_dt"] = pd.to_datetime(df_sorted_comb["fecha"], format="%d/%m/%Y", errors="coerce")
@@ -744,12 +411,13 @@ with tab_combinado:
             ("Vigésimo a la cabeza", metodos.metodo_vigesimo_a_la_cabeza),
             ("Suma de los 3 primeros", metodos.metodo_suma_3_primeros),
             ("Sorteo al revés", metodos.metodo_sorteo_al_reves),
+            ("Secreto del segundo", metodos.metodo_secreto_segundo),
+            ("Atrasados", metodos.metodo_atrasados),
+            ("Decena + cifra", metodos.metodo_decena_cifra),
+            ("Ambos repetidos", metodos.metodo_ambos_repetidos),
+            ("Animales", metodos.metodo_animales),
         ]
-
-        st.markdown("---")
-        st.markdown("### Resultados por método")
-
-        # Preparar el sorteo elegido (el que se eligió en el dropdown)
+        # Preparar el sorteo elegido
         sorteo_elegido = None
         if seleccion_comb and seleccion_comb != "(ninguno)":
             idx_comb = opciones_comb.index(seleccion_comb)
@@ -758,10 +426,8 @@ with tab_combinado:
         resultados_por_metodo = {}
         for nombre, funcion in METODOS:
             try:
-                # Intentamos con sorteo_elegido (métodos nuevos), sino con num_base
                 resultado = funcion(df_comb, sorteo_elegido=sorteo_elegido, num_base=num_base_comb)
             except TypeError:
-                # Fallback para métodos viejos que solo aceptan (df, num_base)
                 try:
                     resultado = funcion(df_comb, num_base_comb)
                 except Exception:
@@ -770,7 +436,9 @@ with tab_combinado:
                 resultado = []
             resultados_por_metodo[nombre] = resultado
 
-        # Mostrar cada método en una caja, 3 por fila
+        st.markdown("---")
+        st.markdown("### Resultados por método")
+
         cols = st.columns(3)
         for i, (nombre, _) in enumerate(METODOS):
             with cols[i % 3]:
@@ -805,14 +473,53 @@ with tab_combinado:
                         </div>
                     </div>
                 """)
-                # Cuadro de información (más chico, debajo de la caja)
                 with st.expander("ℹ️ ¿Qué hace este método?"):
                     st.markdown(f"<small>{info}</small>", unsafe_allow_html=True)
+
+        # --- Bonus del día ---
+        st.markdown("---")
+        st.markdown("## 🎁 Bonus del día")
+        st.markdown("Reglas que aplican hoy y suman puntos extra a los números que ya salieron.")
+
+        bonus_aplicados = []
+        cols_bonus = st.columns(3)
+        for i, funcion_bonus in enumerate(metodos.BONUS_METODOS):
+            try:
+                info = funcion_bonus(df_comb, sorteo_elegido=sorteo_elegido)
+            except Exception as e:
+                info = {"nombre": "Error", "aplica": False, "motivo": str(e), "numeros": []}
+            bonus_aplicados.append(info)
+            with cols_bonus[i % 3]:
+                if info["aplica"]:
+                    color = "#2e7d32"
+                    icono = "✅"
+                    bg = "linear-gradient(145deg, #1a3a1a, #0d200d)"
+                else:
+                    color = "#555"
+                    icono = "❌"
+                    bg = "#0a0a0a"
+                st.html(f"""
+                    <div style="
+                        background: {bg};
+                        border: 1px solid {color};
+                        border-radius: 10px;
+                        padding: 8px;
+                        margin-bottom: 8px;
+                        min-height: 70px;
+                    ">
+                        <div style="font-size:12px; font-weight:bold; color:white;">
+                            {icono} {info['nombre']}
+                        </div>
+                        <div style="font-size:10px; color:#aaa; margin-top:4px;">
+                            {info['motivo']}
+                        </div>
+                    </div>
+                """)
 
         # --- Score combinado ---
         st.markdown("---")
         st.markdown("## 🎯 Score combinado (Top 20)")
-        st.markdown("Cuenta en cuántos métodos apareció cada número.")
+        st.markdown("+1 por cada método donde aparece, +1 extra por cada bonus del día que aplica.")
 
         contador = Counter()
         for nombre, _ in METODOS:
@@ -820,22 +527,443 @@ with tab_combinado:
             for num in vistos_en_metodo:
                 contador[num] += 1
 
+        for info in bonus_aplicados:
+            if info["aplica"] and info["numeros"]:
+                for num in info["numeros"]:
+                    if num in contador:
+                        contador[num] += 1
+
         top_comb = contador.most_common(20)
 
         if top_comb:
-            cols_top = st.columns(5)
+            score_max = max(s for _, s in top_comb) if top_comb else 1
+
+            cols_top = st.columns(8)
             for i, (num, score) in enumerate(top_comb):
-                with cols_top[i % 5]:
+                if score_max > 1:
+                    intensidad = (score - 1) / (score_max - 1)
+                else:
+                    intensidad = 0
+
+                r = int(0 + intensidad * 27)
+                g = int(0 + intensidad * 94)
+                b = int(0 + intensidad * 32)
+                fondo = f"rgb({r},{g},{b})"
+                borde_color = "#fff" if intensidad < 0.5 else "#7ef77e"
+
+                with cols_top[i % 8]:
                     st.markdown(
                         f"""
-                        <div style="border:2px solid #fff; border-radius:10px;
-                                    padding:8px; text-align:center; margin:5px 0;
-                                    background: #000;">
-                            <div style="font-size:20px; font-weight:bold; color:#ff3333;">{num}</div>
-                            <div style="font-size:11px; color:#aaa;">score {score}</div>
+                        <div style="border:1px solid {borde_color};
+                                    border-radius:8px;
+                                    padding:4px; text-align:center; margin:3px 0;
+                                    background: {fondo};
+                                    transition: background 0.3s;">
+                            <div style="font-size:15px; font-weight:bold;
+                                        color:#ff3333;">{num}</div>
+                            <div style="font-size:9px; color:#bbb;">score {score}</div>
                         </div>
                         """,
                         unsafe_allow_html=True
                     )
         else:
             st.info("Ningún método devolvió resultados.")
+
+
+# ============ TAB 4: ESTADÍSTICAS ============
+with tab_estadisticas:
+    st.markdown("### Análisis estadístico de la Quiniela")
+
+    import reglas
+    import metodo_tesla
+    import metodo_piramide
+
+    if not os.path.exists(ARCHIVO_HISTORIAL):
+        st.warning("Todavía no hay historial. Andá a 'Actualizar historial' y traé datos primero.")
+    else:
+        df = pd.read_csv(ARCHIVO_HISTORIAL)
+        st.markdown(f"Analizando **{len(df)} filas** de historial.")
+
+        st.markdown("## 🎯 Score combinado (top 20)")
+        st.markdown("Combina las 5 reglas ponderadas según su confiabilidad.")
+        ranking = reglas.score_combinado(df)
+        cols = st.columns(5)
+        for i, (num, score) in enumerate(ranking):
+            with cols[i % 5]:
+                st.markdown(
+                    f"""
+                    <div style="border:2px solid #fff; border-radius:10px;
+                                padding:8px; text-align:center; margin:5px 0;">
+                        <div style="font-size:20px; font-weight:bold; color:#ff3333;">{num}</div>
+                        <div style="font-size:11px; color:#aaa;">score {score:.0f}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        st.markdown("---")
+
+        st.markdown("## 📊 Frecuencia total (los que más salieron)")
+        top = reglas.regla_frecuencia_total(df)
+        cols = st.columns(5)
+        for i, (num, cant) in enumerate(top):
+            with cols[i % 5]:
+                st.markdown(
+                    f"""
+                    <div style="border:1px solid #555; border-radius:8px;
+                                padding:6px; text-align:center; margin:4px 0;">
+                        <span style="font-size:17px; font-weight:bold;">{num}</span>
+                        <span style="font-size:11px; color:#aaa;"> · {cant}x</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        st.markdown("---")
+
+        st.markdown("## 🔥 Salidores recientes (últimos 30 días)")
+        top = reglas.regla_salidores_recientes(df, 30)
+        cols = st.columns(5)
+        for i, (num, cant) in enumerate(top):
+            with cols[i % 5]:
+                st.markdown(
+                    f"""
+                    <div style="border:1px solid #555; border-radius:8px;
+                                padding:6px; text-align:center; margin:4px 0;">
+                        <span style="font-size:17px; font-weight:bold;">{num}</span>
+                        <span style="font-size:11px; color:#aaa;"> · {cant}x</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        st.markdown("---")
+
+        st.markdown("## 🧊 Atrasados (hace más días que no salen)")
+        top = reglas.regla_atrasados(df)
+        cols = st.columns(5)
+        for i, (num, dias) in enumerate(top):
+            with cols[i % 5]:
+                st.markdown(
+                    f"""
+                    <div style="border:1px solid #555; border-radius:8px;
+                                padding:6px; text-align:center; margin:4px 0;">
+                        <span style="font-size:17px; font-weight:bold;">{num}</span>
+                        <span style="font-size:11px; color:#aaa;"> · {dias}d</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        st.markdown("---")
+
+        hoy = datetime.now().weekday()
+        nombre_dia = reglas.DIAS_ES[hoy]
+        st.markdown(f"## 📅 Frecuencia por día ({nombre_dia})")
+        top = reglas.regla_por_dia_semana(df, hoy)
+        cols = st.columns(5)
+        for i, (num, cant) in enumerate(top):
+            with cols[i % 5]:
+                st.markdown(
+                    f"""
+                    <div style="border:1px solid #555; border-radius:8px;
+                                padding:6px; text-align:center; margin:4px 0;">
+                        <span style="font-size:17px; font-weight:bold;">{num}</span>
+                        <span style="font-size:11px; color:#aaa;"> · {cant}x</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        st.markdown("---")
+
+        st.markdown("## 🔢 Decenas más frecuentes")
+        top = reglas.regla_por_decena(df)
+        cols = st.columns(5)
+        for i, (dec, cant) in enumerate(top):
+            with cols[i % 5]:
+                st.markdown(
+                    f"""
+                    <div style="border:1px solid #555; border-radius:8px;
+                                padding:6px; text-align:center; margin:4px 0;">
+                        <span style="font-size:17px; font-weight:bold;">{dec}</span>
+                        <span style="font-size:11px; color:#aaa;"> · {cant}x</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        df_sorted = df.copy()
+        df_sorted["fecha_dt"] = pd.to_datetime(df_sorted["fecha"], format="%d/%m/%Y", errors="coerce")
+        df_sorted = df_sorted.sort_values("fecha_dt", ascending=False)
+        opciones = df_sorted.apply(
+            lambda r: f"{r['fecha']} - {r['turno']}", axis=1
+        ).tolist()
+
+        # MÉTODO TESLA
+        st.markdown("---")
+        st.markdown("## 🎩 Método Tesla")
+        st.markdown("Elegí un sorteo del historial, **o** escribí un número propio (máx 10 dígitos).")
+
+        col_a, col_b = st.columns([1, 1])
+        with col_a:
+            seleccion = st.selectbox("Sorteo base (opcional):", ["(ninguno)"] + opciones[:50], key="tesla_base")
+        with col_b:
+            numero_manual_tesla = st.text_input("Número propio (opcional, máx 10 dígitos):", key="tesla_manual", max_chars=10, placeholder="Ej: 4904")
+
+        num_base = None
+        origen = ""
+        if numero_manual_tesla and numero_manual_tesla.isdigit():
+            num_base = numero_manual_tesla.zfill(4)
+            origen = "Número propio"
+        elif seleccion and seleccion != "(ninguno)":
+            idx = opciones.index(seleccion)
+            fila = df_sorted.iloc[idx]
+            num_base = str(fila["n1"]).zfill(4)
+            origen = f"Sorteo: {seleccion}"
+
+        if num_base:
+            st.markdown(f"### Número base: **{num_base}** ({origen})")
+            analisis = metodo_tesla.analizar_numero(num_base)
+            jugadas = metodo_tesla.generar_jugadas(analisis)
+            st.markdown("### 🎯 Jugadas sugeridas")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                mostrar_jugadas_en_caja("Ambos (2 cifras)", jugadas["ambos"])
+            with col2:
+                mostrar_jugadas_en_caja("Ternos (3 cifras)", jugadas["ternos"])
+            with col3:
+                mostrar_jugadas_en_caja("Números completos (4 cifras)", jugadas["cuatro_cifras"])
+        else:
+            st.info("Elegí un sorteo o escribí un número para ver las jugadas.")
+
+        st.markdown("---")
+        st.markdown("## 📊 Rendimiento del Método Tesla en el historial")
+        stats = metodo_tesla.medir_metodo_tesla(df)
+        if stats["total"] == 0:
+            st.info("Necesitás al menos 2 sorteos cargados para medir el método.")
+        else:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric("Aciertos a la cabeza", f"{len(stats['aciertos_cabeza'])}/{stats['total']}", f"{100*len(stats['aciertos_cabeza'])/stats['total']:.1f}%")
+            with c2:
+                st.metric("Aciertos en los primeros 10", f"{len(stats['aciertos_10'])}/{stats['total']}", f"{100*len(stats['aciertos_10'])/stats['total']:.1f}%")
+            with c3:
+                st.metric("Aciertos en los 20", f"{len(stats['aciertos_20'])}/{stats['total']}", f"{100*len(stats['aciertos_20'])/stats['total']:.1f}%")
+            st.markdown("### ✅ Números acertados A LA CABEZA")
+            mostrar_cuadros_verdes(stats["aciertos_cabeza"])
+            st.markdown("### ✅ Números acertados EN LOS PRIMEROS 10")
+            mostrar_cuadros_verdes(stats["aciertos_10"])
+            st.markdown("### ✅ Números acertados EN LOS 20")
+            mostrar_cuadros_verdes(stats["aciertos_20"])
+
+        # MÉTODO PIRÁMIDE
+        st.markdown("---")
+        st.markdown("## 🔺 Método de la Pirámide")
+        st.markdown("Elegí un sorteo del historial, **o** escribí un número propio (máx 10 dígitos).")
+
+        col_a, col_b = st.columns([1, 1])
+        with col_a:
+            seleccion_pir = st.selectbox("Sorteo base (opcional):", ["(ninguno)"] + opciones[:50], key="pir_base")
+        with col_b:
+            numero_manual = st.text_input("Número propio (opcional, máx 10 dígitos):", key="pir_manual", max_chars=10, placeholder="Ej: 15092026")
+
+        num_base_pir = None
+        origen = ""
+        if numero_manual and numero_manual.isdigit():
+            num_base_pir = numero_manual
+            origen = "Número propio"
+        elif seleccion_pir and seleccion_pir != "(ninguno)":
+            idx_pir = opciones.index(seleccion_pir)
+            fila_pir = df_sorted.iloc[idx_pir]
+            num_base_pir = str(fila_pir["n1"]).zfill(4)
+            origen = f"Sorteo: {seleccion_pir}"
+
+        if num_base_pir:
+            st.markdown(f"### Número base: **{num_base_pir}** ({origen})")
+            jugadas_pir = metodo_piramide.generar_jugadas(num_base_pir)
+            filas_pir = jugadas_pir["filas"]
+            st.markdown("#### 🔺 Pirámide")
+            for fila in filas_pir:
+                html_fila = "".join([
+                    f'<span style="display:inline-block; width:28px; height:28px; '
+                    f'line-height:28px; text-align:center; margin:2px; '
+                    f'background:#222; border-radius:6px; font-weight:bold; '
+                    f'color:{"#ff3333" if len(fila) == 1 else "white"};">{d}</span>'
+                    for d in fila
+                ])
+                st.markdown(f'<div style="text-align:center;">{html_fila}</div>', unsafe_allow_html=True)
+            st.markdown("### 🎯 Jugadas sugeridas")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                mostrar_jugadas_en_caja("Ambos (2 cifras)", jugadas_pir["ambos"])
+            with col2:
+                mostrar_jugadas_en_caja("Ternos (3 cifras)", jugadas_pir["ternos"])
+            with col3:
+                mostrar_jugadas_en_caja("Números completos (4 cifras)", jugadas_pir["cuatro_cifras"])
+        else:
+            st.info("Elegí un sorteo o escribí un número para ver las jugadas.")
+
+        st.markdown("---")
+        st.markdown("## 📊 Rendimiento del Método Pirámide en el historial")
+        stats_pir = metodo_piramide.medir_metodo_piramide(df)
+        if stats_pir["total_20"] == 0:
+            st.info("Necesitás historial cargado para medir el método.")
+        else:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric("Aciertos a la cabeza", f"{len(stats_pir['aciertos_cabeza'])}/{stats_pir['total_cabeza']}", f"{100*len(stats_pir['aciertos_cabeza'])/stats_pir['total_cabeza']:.1f}%")
+            with c2:
+                st.metric("Aciertos en los primeros 10", f"{len(stats_pir['aciertos_10'])}/{stats_pir['total_10']}", f"{100*len(stats_pir['aciertos_10'])/stats_pir['total_10']:.1f}%")
+            with c3:
+                st.metric("Aciertos en los 20", f"{len(stats_pir['aciertos_20'])}/{stats_pir['total_20']}", f"{100*len(stats_pir['aciertos_20'])/stats_pir['total_20']:.1f}%")
+            st.markdown("### ✅ Números acertados A LA CABEZA")
+            mostrar_cuadros_verdes(stats_pir["aciertos_cabeza"])
+            st.markdown("### ✅ Números acertados EN LOS PRIMEROS 10")
+            mostrar_cuadros_verdes(stats_pir["aciertos_10"])
+            st.markdown("### ✅ Números acertados EN LOS 20")
+            mostrar_cuadros_verdes(stats_pir["aciertos_20"])
+
+# ============ TAB: SUEÑOS Y OFICIOS ============
+with tab_suenios:
+    st.markdown("### 🌙 Sueños y Oficios")
+    st.markdown("Buscá por número o por nombre y descubrí su significado.")
+
+    import significados
+
+      # --- Buscador ---
+    st.markdown("#### 🔍 Buscador")
+    st.markdown("Escribí un número (ej: 44) o un nombre (ej: La Cárcel).")
+
+    col_busq, _ = st.columns([1, 3])
+    with col_busq:
+        consulta = st.text_input(
+            "Buscar:",
+            key="suenios_consulta",
+            placeholder="Ej: 44  o  La Cárcel"
+        )
+
+    if consulta:
+        consulta_limpia = consulta.strip()
+
+        # Si es un número, mostramos sueño y oficio
+        if consulta_limpia.isdigit():
+            numero = consulta_limpia.zfill(2)[-2:]
+            info = significados.buscar_por_numero(numero)
+            st.markdown(f"### Número: **{info['numero']}**")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(
+                    f"""
+                    <div style="border:2px solid #fff; border-radius:12px;
+                                padding:15px; background:#000; text-align:center;">
+                        <div style="font-size:14px; color:#aaa;">🌙 Sueño</div>
+                        <div style="font-size:22px; font-weight:bold; color:#ff3333; margin-top:8px;">
+                            {info['suenio']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            with col2:
+                st.markdown(
+                    f"""
+                    <div style="border:2px solid #fff; border-radius:12px;
+                                padding:15px; background:#000; text-align:center;">
+                        <div style="font-size:14px; color:#aaa;">🔨 Oficio</div>
+                        <div style="font-size:22px; font-weight:bold; color:#ff3333; margin-top:8px;">
+                            {info['oficio']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        # Si es texto, buscamos coincidencias
+        else:
+            resultados = significados.buscar_por_texto(consulta_limpia)
+            if resultados:
+                st.markdown(f"### Resultados para: **{consulta_limpia}**")
+                cols = st.columns(5)
+                for i, r in enumerate(resultados):
+                    with cols[i % 5]:
+                        st.markdown(
+                            f"""
+                            <div style="border:2px solid #fff; border-radius:10px;
+                                        padding:10px; text-align:center; margin:5px 0;
+                                        background:#000;">
+                                <div style="font-size:22px; font-weight:bold; color:#ff3333;">
+                                    {r['numero']}
+                                </div>
+                                <div style="font-size:11px; color:#aaa; margin-top:4px;">
+                                    {r['tipo']}
+                                </div>
+                                <div style="font-size:12px; color:white; margin-top:2px;">
+                                    {r['nombre']}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+            else:
+                st.info(f"No se encontró nada para '{consulta_limpia}'.")
+
+
+    # --- Tablas completas ---
+    sub_suenios, sub_oficios = st.tabs(["🌙 Sueños (0-99)", "🔨 Oficios (0-99)"])
+
+    with sub_suenios:
+        cols = st.columns(8)
+        for i, (num, nombre) in enumerate(significados.SUENIOS.items()):
+            with cols[i % 8]:
+                st.markdown(
+                    f"""
+                    <div style="border:1px solid #555; border-radius:6px;
+                                padding:3px; text-align:center; margin:2px 0;
+                                background:#000;">
+                        <div style="font-size:14px; font-weight:bold; color:#ff3333;
+                                    line-height:1.1;">
+                            {num}
+                        </div>
+                        <div style="font-size:10px; color:white;
+                                    font-weight:600; line-height:1.1;
+                                    margin-top:1px;">
+                            {nombre}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        with sub_oficios:
+            cols = st.columns(8)
+        for i, (num, nombre) in enumerate(significados.OFICIOS.items()):
+            with cols[i % 8]:
+                st.markdown(
+                    f"""
+                    <div style="border:1px solid #555; border-radius:6px;
+                                padding:3px; text-align:center; margin:2px 0;
+                                background:#000;">
+                        <div style="font-size:14px; font-weight:bold; color:#ff3333;
+                                    line-height:1.1;">
+                            {num}
+                        </div>
+                        <div style="font-size:10px; color:white;
+                                    font-weight:600; line-height:1.1;
+                                    margin-top:1px;">
+                            {nombre}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+# ============ TAB 5: DATOS ============
+with tab_datos:
+    st.markdown("### Datos guardados")
+    for archivo in ["datos_quiniela.csv", ARCHIVO_HISTORIAL]:
+        if os.path.exists(archivo):
+            df = pd.read_csv(archivo)
+            st.subheader(f"📄 {archivo} ({len(df)} filas)")
+            st.dataframe(df.tail(30), width='stretch')
+        else:
+            st.info(f"📄 {archivo} todavía no existe")
